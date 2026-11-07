@@ -1,94 +1,276 @@
-# Resume Parser
+# Resume Parser – LLM-Based Resume Information Extraction
 
-Extracts structured data (contact info, summary, work experience, education, skills,
-certifications, projects, languages) from PDF/DOCX resumes using an LLM: a **local model via Ollama (default)** or the **Anthropic Claude API** (optional).
-FastAPI backend + Streamlit UI.
+An AI-powered Resume Parser that extracts structured information from PDF and DOCX resumes using Large Language Models (LLMs).
 
-## Architecture
+The application uses **FastAPI** for the backend, **Streamlit** for the frontend, and **Ollama** for local LLM-based information extraction. It also supports Anthropic Claude as an optional LLM provider.
 
+## Key Features
+
+- Upload resumes in PDF and DOCX formats.
+- Extract contact information, professional summary, work experience, education, skills, certifications, projects, and languages.
+- Generate structured JSON output using LLMs.
+- Validate extracted information using Pydantic models.
+- Support local LLM inference through Ollama.
+- Optional Anthropic Claude API integration.
+- Store extracted results as JSON files.
+- Retrieve previously processed resumes using a unique document ID.
+- Handle invalid files, extraction errors, and LLM failures.
+- Provide interactive API documentation using Swagger UI.
+
+## Technology Stack
+
+| Component | Technology |
+|---|---|
+| Backend | Python, FastAPI |
+| Frontend | Streamlit |
+| LLM | Ollama / Anthropic Claude |
+| Data Validation | Pydantic |
+| PDF Processing | PyMuPDF |
+| DOCX Processing | python-docx |
+| Storage | JSON file-based storage |
+| Testing | Pytest |
+
+## Project Architecture
+
+```text
+                User
+                  |
+                  v
+             Streamlit UI
+                  |
+               HTTP API
+                  |
+                  v
+              FastAPI
+                  |
+          Resume Parser Service
+                  |
+          PDF / DOCX Extraction
+                  |
+                  v
+             LLM Service
+             /         \
+         Ollama      Claude API
+             \         /
+                  |
+           Structured JSON
+                  |
+                  v
+          Pydantic Validation
+                  |
+                  v
+             JSON Storage
+                  |
+                  v
+          Extracted Resume Data
 ```
-Streamlit UI  --HTTP-->  FastAPI (/api/upload, /api/resume/{id})
-                              |-- services/parser.py       PDF/DOCX -> text (PyMuPDF, python-docx)
-                              |-- services/llm_service.py  text -> JSON (Ollama or Claude, schema-constrained)
-                              |-- services/storage.py      JSON file persistence in data/results
+
+## Project Structure
+
+```text
+resume-parser/
+│
+├── app/
+│   ├── main.py
+│   ├── models.py
+│   ├── services/
+│   │   ├── parser.py
+│   │   ├── llm_service.py
+│   │   ├── storage.py
+│   │   ├── fallback.py
+│   │   └── postprocess.py
+│   └── utils/
+│       └── logger.py
+│
+├── data/
+│   └── results/
+│
+├── scripts/
+├── tests/
+├── ui/
+│   └── streamlit_app.py
+│
+├── .env.example
+├── .gitignore
+├── pytest.ini
+├── requirements.txt
+├── requirements-dev.txt
+└── README.md
 ```
 
-Key design choices:
-- **Structured outputs**: the Pydantic schema is passed to Ollama's `format` parameter, so the
-  model is forced to return valid JSON; output is re-validated with Pydantic and retried once.
-- `temperature=0` and an explicit "never invent data" prompt to reduce hallucination.
-- `num_ctx` is raised (Ollama's default context is small and would silently truncate resumes).
+## Installation and Setup
 
-## Setup
-
-1. **Install Ollama** from https://ollama.com and pull a model:
-   ```bash
-   ollama pull llama3.1:8b
-   ```
-2. **Create environment & install dependencies**
-   ```bash
-   python -m venv venv
-   source venv/bin/activate        # Windows: venv\Scripts\activate
-   pip install -r requirements.txt
-   cp .env.example .env            # Windows: copy .env.example .env
-   ```
-3. **Run the API** (terminal 1)
-   ```bash
-   uvicorn app.main:app --reload --port 8000
-   ```
-   Docs: http://localhost:8000/docs
-4. **Run the UI** (terminal 2)
-   ```bash
-   streamlit run ui/streamlit_app.py
-   ```
-
-## API
-
-| Method | Path | Description |
-|---|---|---|
-| POST | `/api/upload` | Upload PDF/DOCX (`multipart/form-data`, field `file`) -> 201 + extracted data + `document_id` |
-| GET | `/api/resume/{document_id}` | Fetch stored result, 404 if unknown |
-| GET | `/health` | Health check |
-
-Status codes: `400` invalid/corrupt file, `413` too large, `422` no readable text (scanned PDF),
-`502` bad LLM output, `503` Ollama not reachable.
+### 1. Clone the Repository
 
 ```bash
-curl -X POST http://localhost:8000/api/upload -F "file=@resume.pdf"
+git clone https://github.com/jafarbasha-dev/resume-parser-llm.git
+cd resume-parser-llm
 ```
 
-## Choosing the LLM provider
+### 2. Create a Virtual Environment
 
-Set `LLM_PROVIDER` in `.env`:
+```bash
+python -m venv venv
+```
 
-- `ollama` (default): fully local, no API key. Needs Ollama running and a pulled model.
-- `anthropic`: set `ANTHROPIC_API_KEY` (and optionally `ANTHROPIC_MODEL`). No Ollama needed.
-  Output is constrained to the schema via a forced tool call.
+Activate it on Windows:
 
-`LLM_MODE=multi` (default) splits extraction into three focused calls (basics, experience, skills),
-which is far more reliable with small local models. `LLM_MODE=single` uses one call and is faster
-with larger models or Claude.
+```bash
+venv\Scripts\activate
+```
 
-Both providers use the same prompts and Pydantic validation; only `services/llm_service.py` differs.
+### 3. Install Dependencies
 
-## Configuration
+```bash
+pip install -r requirements.txt
+```
 
-See `.env.example`. `LLM_MODEL` can be any Ollama model (e.g. `mistral`, `qwen2.5:7b`).
+### 4. Configure Environment Variables
 
-## Tests
+Create a `.env` file from the example:
 
-The tests mock the LLM, so they need neither Ollama nor an API key:
+```bash
+copy .env.example .env
+```
+
+Update the configuration according to your selected LLM provider.
+
+### 5. Configure Ollama (Default Provider)
+
+Install Ollama from:
+
+https://ollama.com
+
+Download the model:
+
+```bash
+ollama pull llama3.1:8b
+```
+
+Make sure the Ollama service is running before starting the application.
+
+### 6. Start the FastAPI Backend
+
+```bash
+uvicorn app.main:app --reload --port 8000
+```
+
+API documentation:
+
+http://localhost:8000/docs
+
+### 7. Start the Streamlit Frontend
+
+Open another terminal, activate the virtual environment, and run:
+
+```bash
+streamlit run ui/streamlit_app.py
+```
+
+The Streamlit interface will open in your browser.
+
+## API Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/api/upload` | Upload and process a PDF/DOCX resume |
+| GET | `/api/resume/{document_id}` | Retrieve extracted resume information |
+| GET | `/health` | Check API health |
+
+### Example API Request
+
+```bash
+curl -X POST http://localhost:8000/api/upload \
+  -F "file=@resume.pdf"
+```
+
+## LLM Configuration
+
+The application supports two LLM providers.
+
+### Ollama
+
+- Runs models locally.
+- Does not require an external API key.
+- Default model: `llama3.1:8b`.
+
+### Anthropic Claude
+
+- Uses the Anthropic API.
+- Requires an API key.
+- Configure the provider and model in the `.env` file.
+
+Example configuration:
+
+```env
+LLM_PROVIDER=ollama
+LLM_MODEL=llama3.1:8b
+LLM_MODE=multi
+```
+
+Refer to `.env.example` for the available configuration options.
+
+## Data Extraction and Validation
+
+The application extracts structured resume information, including:
+
+- Personal and contact details.
+- Professional summary.
+- Employment history.
+- Educational qualifications.
+- Technical and soft skills.
+- Certifications.
+- Projects and languages.
+
+The extracted response is validated against Pydantic schemas to maintain a consistent JSON structure.
+
+The application also uses explicit prompts and output validation to reduce incorrect or unsupported information.
+
+## Testing
+
+The project includes automated tests using Pytest.
+
+Install development dependencies:
 
 ```bash
 pip install -r requirements-dev.txt
+```
+
+Run the test suite:
+
+```bash
 pytest -v
 ```
 
-They cover file validation, PDF/DOCX extraction, the regex/skills fallbacks, hallucination
-clean-up, the LLM service (modes, retries, error translation) and the API status codes.
+**Note:** The automated tests mock LLM responses. They do not require a running Ollama service or an external API key.
 
-## Limitations / future work
+## Error Handling
 
-- Scanned (image-only) PDFs need OCR (e.g. Tesseract) - currently returns a clear 422 error.
-- Results are stored as JSON files; swap in SQLite/Postgres for production.
-- Add a Dockerfile and CI (e.g. GitHub Actions running `pytest`).
+The API handles common errors, including:
+
+- Invalid or unsupported file formats.
+- Corrupted documents.
+- Files exceeding the configured size limit.
+- PDFs without extractable text.
+- LLM service failures.
+- Invalid or missing document IDs.
+
+## Current Limitations and Future Enhancements
+
+- OCR support for scanned or image-based PDF resumes.
+- Database integration using SQLite or PostgreSQL.
+- Docker-based deployment.
+- CI/CD integration using GitHub Actions.
+- Additional resume formats and extraction improvements.
+
+## Author
+
+**Jafar Basha**
+
+GitHub: https://github.com/jafarbasha-dev
+
+---
+
+**Project:** Resume Parser – LLM-Based Information Extraction
+
+**Built with:** Python, FastAPI, Streamlit, Ollama, and Pydantic.
